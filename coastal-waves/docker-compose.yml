@@ -1,0 +1,30 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: waves
+      POSTGRES_PASSWORD: waves
+      POSTGRES_DB: waves
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U waves -d waves"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      WAVE_DATABASE_URL: postgresql+psycopg://waves:waves@db:5432/waves
+      WAVE_AUTO_INIT_DB: "true"
+    ports:
+      - "8000:8000"
+
+volumes:
+  pgdata:
