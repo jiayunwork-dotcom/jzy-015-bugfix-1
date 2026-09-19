@@ -49,6 +49,6 @@ def elevation_grid(
 
     amp = 0.5 * wave_height
     return [
-        [amp * math.cos(k * x - omega * t) for t in times]
-        for x in positions
+        [amp * math.cos(k * x - omega * t) for x in positions]
+        for t in times
     ]

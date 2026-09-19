@@ -44,6 +44,46 @@ def test_solve_with_elevation_grid(client):
     assert len(grid["eta"]) == 2 and len(grid["eta"][0]) == 2
 
 
+def test_solve_nonsquare_grid_shape_matches_array(client):
+    # 复现算例：3 个位置、2 个时刻 → 标称形状与真实数组都必须是 2 行 3 列
+    positions, times = [0.0, 5.0, 10.0], [0.0, 1.0]
+    r = client.post("/solve", json={
+        "water_depth": 10, "wave_height": 2, "period": 8,
+        "positions": positions, "times": times,
+    })
+    assert r.status_code == 200
+    grid = r.json()["surface_elevation_grid"]
+
+    assert grid["shape"] == [2, 3]
+    assert len(grid["eta"]) == 2
+    assert all(len(row) == 3 for row in grid["eta"])
+
+    body = r.json()
+    k = body["dispersion"]["wavenumber"]
+    omega = body["dispersion"]["angular_frequency"]
+    for i, t in enumerate(times):
+        for j, x in enumerate(positions):
+            assert grid["eta"][i][j] == pytest.approx(
+                math.cos(k * x - omega * t)
+            )
+
+
+def test_solve_grid_empty_when_one_axis_missing(client):
+    r = client.post("/solve", json={
+        "water_depth": 10, "wave_height": 2, "period": 8,
+        "positions": [0.0, 5.0, 10.0],
+    })
+    body = r.json()
+    assert "surface_elevation_grid" not in body
+    r = client.post("/solve", json={
+        "water_depth": 10, "wave_height": 2, "period": 8,
+        "positions": [], "times": [0.0, 1.0],
+    })
+    grid = r.json()["surface_elevation_grid"]
+    assert grid["shape"] == [2, 0]
+    assert grid["eta"] == []
+
+
 def test_steepness_over_limit_rejected(client):
     r = client.post("/solve", json={"water_depth": 10, "wave_height": 6.0, "period": 8})
     assert r.status_code == 422

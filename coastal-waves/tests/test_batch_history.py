@@ -54,6 +54,40 @@ def test_batch_shared_grid_applies_to_each_item(client):
     assert body["success_count"] == 2
     for row in body["results"]:
         assert row["surface_elevation_grid"]["shape"] == [1, 2]
+        eta = row["surface_elevation_grid"]["eta"]
+        assert len(eta) == 1 and len(eta[0]) == 2
+
+
+def test_batch_nonsquare_grid_layout_matches_declared_shape(client):
+    # 批量路径同样要满足：3 位置 × 2 时刻 → 2 行 3 列，逐元素正确
+    import math
+
+    positions, times = [0.0, 5.0, 10.0], [0.0, 1.0]
+    items = [
+        {"water_depth": 10, "wave_height": 2, "period": 8},
+        {"water_depth": 1000, "wave_height": 1, "period": 8},
+    ]
+    r = client.post("/solve/batch", json={
+        "items": items, "positions": positions, "times": times,
+    })
+    assert r.status_code == 200
+    body = r.json()
+    assert body["success_count"] == 2
+
+    for row in body["results"]:
+        assert row["status"] == "ok"
+        grid = row["surface_elevation_grid"]
+        assert grid["shape"] == [2, 3]
+        eta = grid["eta"]
+        assert len(eta) == 2 and all(len(r0) == 3 for r0 in eta)
+        k = row["dispersion"]["wavenumber"]
+        omega = row["dispersion"]["angular_frequency"]
+        H = row["input"]["wave_height"]
+        for i, t in enumerate(times):
+            for j, x in enumerate(positions):
+                assert eta[i][j] == pytest.approx(
+                    0.5 * H * math.cos(k * x - omega * t)
+                )
 
 
 def test_history_persists_success_and_error_and_filters(client):
