@@ -48,7 +48,8 @@ def elevation_grid(
         return []
 
     amp = 0.5 * wave_height
+    # 外层随时刻（行）、内层随位置（列），保证 eta[i][j] == η(positions[j], times[i])
     return [
-        [amp * math.cos(k * x - omega * t) for t in times]
-        for x in positions
+        [amp * math.cos(k * x - omega * t) for x in positions]
+        for t in times
     ]

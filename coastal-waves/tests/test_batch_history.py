@@ -56,6 +56,37 @@ def test_batch_shared_grid_applies_to_each_item(client):
         assert row["surface_elevation_grid"]["shape"] == [1, 2]
 
 
+def test_batch_non_square_grid_matches_declared_shape_and_values(client):
+    """批量共享 3 位置 × 2 时刻网格：每行结果都必须 2 行 3 列、逐元素对位。"""
+    import math
+
+    positions, times = [0.0, 5.0, 10.0], [0.0, 1.0]
+    r = client.post("/solve/batch", json={
+        "items": [
+            {"water_depth": 10, "wave_height": 2, "period": 8},
+            {"water_depth": 1000, "wave_height": 1, "period": 8},
+        ],
+        "positions": positions,
+        "times": times,
+    })
+    body = r.json()
+    assert body["success_count"] == 2
+    for row in body["results"]:
+        grid = row["surface_elevation_grid"]
+        assert grid["shape"] == [2, 3]
+        eta = grid["eta"]
+        assert len(eta) == 2 and all(len(r0) == 3 for r0 in eta)
+
+        H = row["input"]["wave_height"]
+        k = row["dispersion"]["wavenumber"]
+        omega = row["dispersion"]["angular_frequency"]
+        for i, t in enumerate(times):
+            for j, x in enumerate(positions):
+                assert eta[i][j] == pytest.approx(
+                    0.5 * H * math.cos(k * x - omega * t), rel=1e-12
+                )
+
+
 def test_history_persists_success_and_error_and_filters(client):
     client.post("/solve", json={"water_depth": 10, "wave_height": 2, "period": 8})
     client.post("/solve", json={"water_depth": 1000, "wave_height": 1, "period": 8})

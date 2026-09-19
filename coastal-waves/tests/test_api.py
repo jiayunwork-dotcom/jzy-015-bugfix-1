@@ -44,6 +44,55 @@ def test_solve_with_elevation_grid(client):
     assert len(grid["eta"]) == 2 and len(grid["eta"][0]) == 2
 
 
+def test_solve_non_square_grid_matches_declared_shape_and_convention(client):
+    """3 位置 × 2 时刻：必须返回 2 行 3 列，eta[i][j] 对应 times[i]、positions[j]。"""
+    positions, times = [0.0, 5.0, 10.0], [0.0, 1.0]
+    r = client.post("/solve", json={
+        "water_depth": 10, "wave_height": 2, "period": 8,
+        "positions": positions, "times": times,
+    })
+    assert r.status_code == 200
+    grid = r.json()["surface_elevation_grid"]
+
+    # 标称形状 [时刻数, 位置数] 必须与真实数组维度逐一对应
+    assert grid["shape"] == [2, 3]
+    eta = grid["eta"]
+    assert len(eta) == 2
+    assert all(len(row) == 3 for row in eta)
+
+    k = r.json()["dispersion"]["wavenumber"]
+    omega = r.json()["dispersion"]["angular_frequency"]
+    for i, t in enumerate(times):
+        for j, x in enumerate(positions):
+            assert eta[i][j] == pytest.approx(
+                math.cos(k * x - omega * t), rel=1e-12
+            )  # H/2 = 1.0
+
+
+def test_solve_non_square_grid_other_orientation(client):
+    """2 位置 × 4 时刻：另一方向的非方阵，外层必须随时刻（4 行）。"""
+    positions, times = [0.0, 1.0], [0.0, 1.0, 2.0, 3.0]
+    r = client.post("/solve", json={
+        "water_depth": 10, "wave_height": 2, "period": 8,
+        "positions": positions, "times": times,
+    })
+    grid = r.json()["surface_elevation_grid"]
+    assert grid["shape"] == [4, 2]
+    eta = grid["eta"]
+    assert len(eta) == 4 and all(len(row) == 2 for row in eta)
+
+
+def test_solve_empty_grid_returns_empty_array(client):
+    r = client.post("/solve", json={
+        "water_depth": 10, "wave_height": 2, "period": 8,
+        "positions": [], "times": [],
+    })
+    assert r.status_code == 200
+    grid = r.json()["surface_elevation_grid"]
+    assert grid["shape"] == [0, 0]
+    assert grid["eta"] == []
+
+
 def test_steepness_over_limit_rejected(client):
     r = client.post("/solve", json={"water_depth": 10, "wave_height": 6.0, "period": 8})
     assert r.status_code == 422
